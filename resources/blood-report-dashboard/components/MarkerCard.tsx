@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useState } from "react";
 import type { BloodMarker } from "../types";
+import { GaugeBar } from "./GaugeBar";
 
 const statusConfig = {
   normal: {
@@ -30,10 +31,18 @@ interface MarkerCardProps {
 }
 
 export const MarkerCard: React.FC<MarkerCardProps> = ({ marker }) => {
+  const [expanded, setExpanded] = useState(false);
   const cfg = statusConfig[marker.status];
+  const hasGauge =
+    marker.referenceRangeLow !== null && marker.referenceRangeHigh !== null;
 
   return (
-    <div className={`rounded-xl p-3 border ${cfg.border} ${cfg.bg}`}>
+    <div
+      className={`rounded-xl p-3 border ${cfg.border} ${cfg.bg} transition-all duration-200 ${
+        hasGauge ? "cursor-pointer select-none" : ""
+      }`}
+      onClick={() => hasGauge && setExpanded((v) => !v)}
+    >
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-default truncate">{marker.name}</p>
@@ -45,13 +54,23 @@ export const MarkerCard: React.FC<MarkerCardProps> = ({ marker }) => {
             Ref: {marker.referenceRangeText}
           </p>
         </div>
-        <span
-          className={`shrink-0 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${cfg.badge}`}
-        >
-          <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
-          {cfg.label}
-        </span>
+
+        <div className="flex flex-col items-end gap-1.5 shrink-0">
+          <span
+            className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${cfg.badge}`}
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+            {cfg.label}
+          </span>
+          {hasGauge && (
+            <span className="text-secondary" style={{ fontSize: 9 }}>
+              {expanded ? "▲ hide" : "▼ gauge"}
+            </span>
+          )}
+        </div>
       </div>
+
+      {expanded && <GaugeBar marker={marker} />}
     </div>
   );
 };

@@ -127,12 +127,12 @@ server.tool(
   {
     name: "generate-basic-report",
     description:
-      "Parse a blood test report and display a visual health dashboard with all markers color-coded by status. Use this after the user uploads or pastes a blood test report.",
+      "Parse a blood test report and display a visual health dashboard with all markers color-coded by status. Call this once the user has uploaded their blood test report file — use the full extracted text from the uploaded document.",
     schema: z.object({
       reportText: z
         .string()
         .describe(
-          "Raw text content from the blood test report. Include all marker names, values, units, and reference ranges exactly as they appear."
+          "Full text extracted from the user's uploaded blood test report file (PDF or document). Use the complete text from the file upload — never ask the user to type or paste this manually."
         ),
     }),
     annotations: { readOnlyHint: true, openWorldHint: true },
@@ -185,7 +185,9 @@ server.tool(
     schema: z.object({
       reportText: z
         .string()
-        .describe("Raw text content from the blood test report"),
+        .describe(
+          "Full text extracted from the user's uploaded blood test report file (PDF or document). Use the complete text from the file upload — never ask the user to type or paste this manually."
+        ),
       problem: z
         .string()
         .describe(
@@ -232,6 +234,33 @@ server.tool(
       );
     }
   }
+);
+
+// ─── Assistant instructions ───────────────────────────────────────────────────
+
+server.prompt(
+  {
+    name: "assistant-instructions",
+    description: "Behavioural instructions for the blood health assistant",
+  },
+  async () =>
+    text(
+      `You are a blood health assistant that helps users understand their blood test results.
+
+IMPORTANT — file uploads:
+- Always ask the user to upload their blood test report as a FILE (PDF or image). Never ask them to type or paste text.
+- When the user uploads a file, read its full extracted text and pass it directly to the tool.
+- Do not summarise or truncate the file contents before passing to the tool — use everything.
+
+Choosing the right tool:
+- If the user just wants to see their results: call generate-basic-report.
+- If the user mentions a symptom or condition (e.g. "back pain", "fatigue", "hair loss"): call generate-problem-analysis with both the report text and their stated problem.
+- If they upload a report AND mention a symptom in the same message, call generate-problem-analysis directly — no need to run the basic report first.
+
+Tone:
+- Surface patterns and data insights only. Never provide medical diagnoses or treatment advice.
+- If results look concerning, recommend they consult a qualified healthcare professional.`
+    )
 );
 
 server.listen().then(() => {

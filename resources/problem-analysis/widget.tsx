@@ -35,9 +35,6 @@ const statusConfig = {
   },
 };
 
-const scoreColor = (score: number) =>
-  score >= 75 ? "#22c55e" : score >= 50 ? "#f59e0b" : "#ef4444";
-
 type ViewMode = "chart" | "list";
 
 const ProblemAnalysis: React.FC = () => {
@@ -118,7 +115,6 @@ const ProblemAnalysis: React.FC = () => {
             <div className="space-y-2">
               {relevantMarkers.map((marker, i) => {
                 const cfg = statusConfig[marker.status];
-                const sc = scoreColor(marker.score);
                 return (
                   <div
                     key={i}
@@ -144,19 +140,6 @@ const ProblemAnalysis: React.FC = () => {
                       <p className="text-xs text-secondary mt-1 leading-relaxed">
                         {marker.relevanceNote}
                       </p>
-                    </div>
-                    {/* Score badge */}
-                    <div
-                      className="shrink-0 w-12 h-12 rounded-full flex flex-col items-center justify-center border-2"
-                      style={{ borderColor: sc }}
-                    >
-                      <span
-                        className="text-sm font-bold leading-none"
-                        style={{ color: sc }}
-                      >
-                        {marker.score}
-                      </span>
-                      <span className="text-xs text-secondary leading-none">/100</span>
                     </div>
                   </div>
                 );
