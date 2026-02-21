@@ -1,5 +1,7 @@
 # 🩸 BadBlood 
 
+<img src="assets/spider-chart.png" alt="BadBlood Spider Chart - Health Intelligence Map" width="100%">
+
 > *"‘Cause, baby, now we got bad blood. You know it used to be mad love."* — Taylor Swift
 
 **The future of patient-centric health intelligence.**
@@ -32,9 +34,9 @@ BadBlood is built from the ground up as a **Model Context Protocol (MCP) server*
 
 The patient uploads a standard, messy lab report PDF (from Quest Diagnostics, LabCorp, etc.) directly into their favorite AI chat window.
 
-*(Insert GIF/Image here: A clean UI showing a messy standard lab PDF being dropped into a minimal chat window, instantly transforming into a beautiful Radar Chart)*
+*(Example: A clean UI showing the transformation into a beautiful, personalized health report)*
 <p align="center">
-  <img src="https://via.placeholder.com/800x400?text=Animated+GIF:+PDF+Drop+to+Spider+Chart+Transformation" alt="BadBlood Visualization Demo" width="100%">
+  <img src="assets/blood-report.png" alt="BadBlood Visualization Demo" width="100%">
 </p>
 
 Immediately, BadBlood's extraction engine parses the unstructured data and normalizes the chaotic biomarkers into five core physiological systems:
@@ -58,9 +60,9 @@ When the patient provides context (*"Yes, I'm exhausted every afternoon and have
 
 BadBlood then generates a **Doctor's Briefing**—a concise, formatted summary correlating their physical symptoms to their out-of-range clinical data. It provides the patient with the specific, necessary questions they must ask their physician at their next visit. 
 
-*(Insert Screenshot here: The 'Doctor's Briefing' output showing exactly what the patient needs to ask)*
+*(Example: The context-aware output showing actionable insights on markers of concern)*
 <p align="center">
-  <img src="https://via.placeholder.com/800x400?text=Screenshot:+Actionable+Doctor's+Briefing" alt="BadBlood Doctor's Briefing" width="80%">
+  <img src="assets/spider-chart.png" alt="BadBlood Contextual Briefing" width="80%">
 </p>
 
 ---
