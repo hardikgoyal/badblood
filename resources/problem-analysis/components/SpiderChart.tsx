@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useRef, useState } from "react";
 import {
   RadarChart,
   PolarGrid,
@@ -6,135 +6,256 @@ import {
   PolarRadiusAxis,
   Radar,
   ResponsiveContainer,
-  Tooltip,
 } from "recharts";
 import type { RelevantMarker } from "../types";
 
 interface SpiderChartProps {
   markers: RelevantMarker[];
+  problem: string;
 }
 
-const scoreColor = (score: number) =>
-  score >= 75 ? "#22c55e" : score >= 50 ? "#f59e0b" : "#ef4444";
+interface TooltipState {
+  marker: RelevantMarker;
+  x: number;
+  y: number;
+}
 
-export const SpiderChart: React.FC<SpiderChartProps> = ({ markers }) => {
+const floorTo = (n: number, step: number) => Math.floor(n / step) * step;
+const ceilTo  = (n: number, step: number) => Math.ceil(n / step)  * step;
+
+const STATUS_COLORS = {
+  normal:    "#15803d",  // green-700
+  borderline: "#b45309", // amber-700
+  abnormal:  "#b91c1c",  // red-700
+} as const;
+
+function getConcern(abnormal: number, borderline: number) {
+  if (abnormal >= 2)                     return { label: "High concern",      color: "#b91c1c", icon: "⚠️" };
+  if (abnormal === 1 || borderline >= 2) return { label: "Moderate concern",  color: "#b45309", icon: "⚡" };
+  if (borderline === 1)                  return { label: "Worth monitoring",  color: "#4d7c0f", icon: "👁" };
+  return                                        { label: "Markers look okay", color: "#15803d", icon: "✓" };
+}
+
+/** Split a string into lines of at most maxChars characters, breaking on spaces */
+function wrapText(text: string, maxChars = 11): string[] {
+  const words = text.split(" ");
+  const lines: string[] = [];
+  let current = "";
+  for (const word of words) {
+    if (!current) {
+      current = word;
+    } else if ((current + " " + word).length <= maxChars) {
+      current += " " + word;
+    } else {
+      lines.push(current);
+      current = word;
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
+export const SpiderChart: React.FC<SpiderChartProps> = ({ markers, problem }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [tooltip, setTooltip] = useState<TooltipState | null>(null);
+
+  const scores = markers.map((m) => m.score);
+  const rawMin = Math.min(...scores);
+  const rawMax = Math.max(...scores);
+  const pad = Math.max(8, Math.round((rawMax - rawMin) * 0.12));
+  const domainMin = Math.max(0,   floorTo(rawMin - pad, 10));
+  const domainMax = Math.min(100, ceilTo(rawMax  + pad, 10));
+
+  const abnormalCount   = markers.filter((m) => m.status === "abnormal").length;
+  const borderlineCount = markers.filter((m) => m.status === "borderline").length;
+  const normalCount     = markers.filter((m) => m.status === "normal").length;
+  const concern = getConcern(abnormalCount, borderlineCount);
+
   const data = markers.map((m) => ({
-    subject: m.name.length > 13 ? m.name.slice(0, 12) + "…" : m.name,
-    fullName: m.name,
-    score: m.score,
-    fullMark: 100,
+    subject:  m.name,
+    score:    m.score,
+    fullMark: domainMax,
   }));
 
-  const avg = Math.round(
-    markers.reduce((sum, m) => sum + m.score, 0) / markers.length
-  );
-  const avgColor = scoreColor(avg);
+  // Custom axis tick — full name with word-wrap, hover triggers tooltip
+  const renderAxisTick = (props: any) => {
+    const { x, y, payload, textAnchor } = props;
+    const marker = markers.find((m) => m.name === payload.value);
+    const statusColor = marker ? STATUS_COLORS[marker.status] : "#6b7280";
+    const lines = wrapText(payload.value, 11);
+    const lineHeight = 13;
+    const startY = y - ((lines.length - 1) * lineHeight) / 2;
+
+    return (
+      <text
+        x={x}
+        textAnchor={textAnchor}
+        fill={statusColor}
+        fontSize={11}
+        fontWeight={marker?.status !== "normal" ? 600 : 400}
+        style={{ cursor: "default", userSelect: "none" }}
+        onMouseEnter={(e) => {
+          if (!marker) return;
+          const rect = containerRef.current?.getBoundingClientRect();
+          if (!rect) return;
+          setTooltip({
+            marker,
+            x: e.clientX - rect.left,
+            y: e.clientY - rect.top,
+          });
+        }}
+      >
+        {lines.map((line, i) => (
+          <tspan key={i} x={x} y={startY + i * lineHeight}>
+            {line}
+          </tspan>
+        ))}
+      </text>
+    );
+  };
+
+  // Flip tooltip to left side if it would overflow the right edge
+  const TOOLTIP_W = 240;
+  const TOOLTIP_OFFSET = 12;
+  const containerW = containerRef.current?.offsetWidth ?? 500;
+  const tooltipLeft = tooltip
+    ? tooltip.x + TOOLTIP_OFFSET + TOOLTIP_W > containerW
+      ? tooltip.x - TOOLTIP_W - TOOLTIP_OFFSET
+      : tooltip.x + TOOLTIP_OFFSET
+    : 0;
 
   return (
     <div className="space-y-3">
-      {/* Average score chip */}
+      {/* Concern level header */}
       <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-secondary">
-          Biomarker Health Scores
-        </span>
+        <span className="text-sm font-medium text-secondary">Relevant biomarkers</span>
         <span
-          className="text-sm font-bold px-3 py-1 rounded-full"
-          style={{
-            color: avgColor,
-            backgroundColor: avgColor + "1a",
-          }}
+          className="text-sm font-semibold px-3 py-1 rounded-full"
+          style={{ color: concern.color, backgroundColor: concern.color + "1a" }}
         >
-          Avg {avg}/100
+          {concern.icon} {concern.label}
         </span>
       </div>
 
-      {/* Radar chart */}
-      <ResponsiveContainer width="100%" height={300}>
-        <RadarChart data={data} margin={{ top: 10, right: 35, bottom: 10, left: 35 }}>
-          <PolarGrid stroke="#6b728040" />
-          <PolarAngleAxis
-            dataKey="subject"
-            tick={{ fontSize: 11, fill: "#9ca3af" }}
-          />
-          <PolarRadiusAxis
-            angle={90}
-            domain={[0, 100]}
-            tick={{ fontSize: 9, fill: "#9ca3af" }}
-            tickCount={5}
-            axisLine={false}
-          />
-          <Radar
-            name="Score"
-            dataKey="score"
-            stroke={avgColor}
-            fill={avgColor}
-            fillOpacity={0.2}
-            strokeWidth={2.5}
-            dot={{ r: 4, fill: avgColor, strokeWidth: 0 }}
-          />
-          <Tooltip
-            content={({ active, payload }) => {
-              if (!active || !payload?.length) return null;
-              const subject = payload[0]?.payload?.subject as string;
-              const marker = markers.find(
-                (m) =>
-                  m.name === payload[0]?.payload?.fullName ||
-                  m.name.slice(0, 12) + "…" === subject ||
-                  m.name === subject
-              );
-              if (!marker) return null;
-              const c = scoreColor(marker.score);
-              return (
-                <div
+      {/* Chart wrapper — relative so tooltip is positioned inside it */}
+      <div ref={containerRef} style={{ position: "relative" }} onMouseLeave={() => setTooltip(null)}>
+        <ResponsiveContainer width="100%" height={300}>
+          <RadarChart data={data} margin={{ top: 20, right: 55, bottom: 20, left: 55 }}>
+            <PolarGrid stroke="#6b728040" />
+            <PolarAngleAxis dataKey="subject" tick={renderAxisTick} />
+            <PolarRadiusAxis
+              angle={90}
+              domain={[domainMin, domainMax]}
+              tick={false}
+              axisLine={false}
+            />
+            <Radar
+              name="Score"
+              dataKey="score"
+              stroke="#6366f1"
+              fill="#6366f1"
+              fillOpacity={0.2}
+              strokeWidth={2.5}
+              dot={{ r: 4, fill: "#6366f1", strokeWidth: 0 }}
+            />
+          </RadarChart>
+        </ResponsiveContainer>
+
+        {/* Tooltip — only visible when hovering a label */}
+        {tooltip && (() => {
+          const m = tooltip.marker;
+          const statusColor = STATUS_COLORS[m.status];
+          const statusLabel = m.status.charAt(0).toUpperCase() + m.status.slice(1);
+          const gray = "var(--color-text-secondary, #6b7280)";
+          const def  = "var(--color-text-default, #111)";
+          return (
+            <div
+              style={{
+                position: "absolute",
+                left: tooltipLeft,
+                top: tooltip.y - 10,
+                width: TOOLTIP_W,
+                background: "var(--color-surface-elevated, #fff)",
+                border: "1px solid var(--color-border-default, #e5e7eb)",
+                borderRadius: 12,
+                padding: "10px 14px",
+                boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
+                fontSize: 12,
+                pointerEvents: "none",
+                zIndex: 10,
+              }}
+            >
+              {/* Name + status badge */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 6 }}>
+                <p style={{ fontWeight: 700, color: def, lineHeight: 1.3 }}>{m.name}</p>
+                <span
                   style={{
-                    background: "var(--color-surface-elevated, #fff)",
-                    border: "1px solid var(--color-border-default, #e5e7eb)",
-                    borderRadius: 10,
-                    padding: "8px 12px",
-                    boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-                    fontSize: 12,
-                    maxWidth: 200,
+                    fontWeight: 600,
+                    color: statusColor,
+                    background: statusColor + "1a",
+                    borderRadius: 20,
+                    padding: "1px 8px",
+                    fontSize: 11,
+                    whiteSpace: "nowrap",
                   }}
                 >
-                  <p
-                    style={{
-                      fontWeight: 600,
-                      color: "var(--color-text-default, #111)",
-                      marginBottom: 4,
-                    }}
-                  >
-                    {marker.name}
-                  </p>
-                  <p style={{ color: "var(--color-text-secondary, #6b7280)" }}>
-                    Value: {marker.value}
-                  </p>
-                  <p style={{ color: "var(--color-text-secondary, #6b7280)" }}>
-                    Ref: {marker.referenceRange}
-                  </p>
-                  <p style={{ color: c, fontWeight: 600, marginTop: 2 }}>
-                    Score: {marker.score}/100
-                  </p>
-                </div>
-              );
-            }}
-          />
-        </RadarChart>
-      </ResponsiveContainer>
+                  {statusLabel}
+                </span>
+              </div>
 
-      {/* Score legend */}
+              {/* Relevance note */}
+              <p
+                style={{
+                  color: def,
+                  fontSize: 11,
+                  lineHeight: 1.5,
+                  marginBottom: 8,
+                  borderLeft: `3px solid ${statusColor}`,
+                  paddingLeft: 8,
+                }}
+              >
+                {m.relevanceNote}
+              </p>
+
+              {/* Raw values */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                <p style={{ color: gray }}>
+                  <span style={{ color: def, fontWeight: 600 }}>Your value: </span>
+                  {m.value}
+                </p>
+                <p style={{ color: gray }}>
+                  <span style={{ color: def, fontWeight: 600 }}>Normal range: </span>
+                  {m.referenceRange}
+                </p>
+                <p style={{ color: gray, marginTop: 4, fontSize: 10, fontStyle: "italic" }}>
+                  In context of: {problem}
+                </p>
+              </div>
+            </div>
+          );
+        })()}
+      </div>
+
+      {/* Status counts */}
       <div className="flex items-center justify-center gap-5 text-xs text-secondary">
-        <span className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-green-500" />
-          Optimal (75–100)
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-          Borderline (50–74)
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-red-500" />
-          Abnormal (0–49)
-        </span>
+        {normalCount > 0 && (
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-green-500" />
+            {normalCount} normal
+          </span>
+        )}
+        {borderlineCount > 0 && (
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-amber-500" />
+            {borderlineCount} borderline
+          </span>
+        )}
+        {abnormalCount > 0 && (
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-red-500" />
+            {abnormalCount} abnormal
+          </span>
+        )}
       </div>
     </div>
   );

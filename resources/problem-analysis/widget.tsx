@@ -5,6 +5,7 @@ import { Link } from "react-router";
 import "../styles.css";
 import { propSchema, type ProblemAnalysisProps } from "./types";
 import { SpiderChart } from "./components/SpiderChart";
+import { ChartSummary } from "./components/ChartSummary";
 import { RecommendationsList } from "./components/RecommendationsList";
 
 export const widgetMetadata: WidgetMetadata = {
@@ -81,7 +82,7 @@ const ProblemAnalysis: React.FC = () => {
                 onClick={() => setView(v)}
                 className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                   view === v
-                    ? "bg-info text-white shadow-sm"
+                    ? "bg-gray-900 text-white dark:bg-white dark:text-gray-900 shadow-sm"
                     : "text-secondary hover:text-default"
                 }`}
               >
@@ -90,10 +91,25 @@ const ProblemAnalysis: React.FC = () => {
             ))}
           </div>
 
-          {/* Spider Chart */}
+          {/* Spider Chart + Summary side by side */}
           {view === "chart" && (
             <div className="rounded-2xl border border-default bg-surface-elevated p-4">
-              <SpiderChart markers={relevantMarkers} />
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-[3fr_2fr]">
+                <SpiderChart markers={relevantMarkers} problem={problem} />
+                <div
+                  style={{
+                    borderLeft: "1px solid var(--color-border-default, #e5e7eb)",
+                    paddingLeft: 16,
+                  }}
+                  className="hidden sm:block"
+                >
+                  <ChartSummary markers={relevantMarkers} problem={problem} />
+                </div>
+              </div>
+              {/* On narrow screens, summary stacks below */}
+              <div className="sm:hidden mt-4 pt-4 border-t border-default">
+                <ChartSummary markers={relevantMarkers} problem={problem} />
+              </div>
             </div>
           )}
 
