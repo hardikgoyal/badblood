@@ -30,9 +30,11 @@
   "dependencies": {
     "@openai/apps-sdk-ui": "^0.2.1",
     "mcp-use": "latest",
+    "openai": "^6.22.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-router": "^7.13.0",
+    "recharts": "^3.7.0",
     "tailwindcss": "^4.2.0",
     "zod": "4.3.5"
   },
