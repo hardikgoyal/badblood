@@ -15,8 +15,6 @@ BadBlood is not just a translation layer; it is the new interface for human biol
 ### 🤖 Native AI Integration (MCP)
 BadBlood is built from the ground up as a **Model Context Protocol (MCP)** server. This means there is no clunky app to download or new portal to log into. Patients can access BadBlood's intelligence directly through the AI assistants they already use and trust every day, like **ChatGPT** or **Claude**.
 
-### 🔒 Zero-Trust Privacy
-Health data is sacred. Because BadBlood operates via the MCP architecture, the patient's data processing happens entirely within their chosen, secure AI session. Raw pathology reports and symptom data are never stored or sold by a third-party database. It is pure, private intelligence.
 
 ### Phase 1: Data Ingestion & Instant Visualization
 
