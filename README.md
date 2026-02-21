@@ -1,7 +1,5 @@
 # 🩸 BadBlood 
 
-<img src="assets/spider-chart.png" alt="BadBlood Spider Chart - Health Intelligence Map" width="100%">
-
 > *"‘Cause, baby, now we got bad blood. You know it used to be mad love."* — Taylor Swift
 
 **The future of patient-centric health intelligence.**
