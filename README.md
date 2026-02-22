@@ -79,7 +79,15 @@ BadBlood is built from the ground up as a **Model Context Protocol (MCP) server*
 
 **You:** *"Please use BadBlood to analyze my report. Why am I exhausted every afternoon?"*
 
-**ChatGPT:** *(Instantly ingests your PDFs, builds your Spider Chart, and hands you your actionable briefing).*
+**BadBlood (via ChatGPT):** 
+*Based on your report, I found several biomarkers out of normal range that could be contributing to your fatigue. Here is a visual breakdown of the markers most strongly correlated with your symptoms:*
+
+<p align="center">
+  <img src="assets/spider-chart-fatigue.png" alt="Example Interaction - Spider Chart" width="100%">
+</p>
+
+*The chart shows a noticeably uneven shape, pointing to multiple concerns.*
+*Would you like to deep-dive into any of these specific markers (like your elevated WBC Count or Triglycerides) to see what you can do about them?*
 
 ---
 
