@@ -35,7 +35,7 @@ The key insight: `useCallTool` **does** return the data via `result.structuredCo
 
 ### File 1: `resources/problem-analysis/widget.tsx`
 
-**Step 1 — Add state for the biomarker report data**
+**Step 1 — Add imports for biomarker report types and sub-components**
 
 ```diff
  import { McpUseProvider, useWidget, useCallTool, type WidgetMetadata } from "mcp-use/react";
@@ -49,6 +49,8 @@ The key insight: `useCallTool` **does** return the data via `result.structuredCo
 +import { DoctorSection } from "../biomarker-report/components/DoctorSection";
 ```
 
+**Step 2 — Replace `biomarkerCall` with destructured `callToolAsync` + add report state**
+
 ```diff
    const [selectedMarker, setSelectedMarker] = useState<RelevantMarker | null>(null);
 -  const biomarkerCall = useCallTool("generate-biomarker-report");
@@ -56,7 +58,25 @@ The key insight: `useCallTool` **does** return the data via `result.structuredCo
 +  const [biomarkerReport, setBiomarkerReport] = useState<BiomarkerReportProps | null>(null);
 ```
 
-**Step 2 — Rewrite `handleMarkerClick` to fetch data and store locally**
+**Step 3 — Update the Escape key handler to also clear the report**
+
+```diff
+   useEffect(() => {
+     const onKey = (e: KeyboardEvent) => {
+-      if (e.key === "Escape") setSelectedMarker(null);
++      if (e.key === "Escape") {
++        setSelectedMarker(null);
++        setBiomarkerReport(null);
++      }
+     };
+     window.addEventListener("keydown", onKey);
+     return () => window.removeEventListener("keydown", onKey);
+   }, []);
+```
+
+**Step 4 — Rewrite `handleMarkerClick` to fetch data and store locally**
+
+> **IMPORTANT:** `reportText` is now `optional` in `ProblemAnalysisProps` (changed to `z.string().optional()`). The `generate-biomarker-report` tool requires `reportText` as a non-optional string. Must guard against `undefined`.
 
 ```diff
    const handleMarkerClick = (marker: RelevantMarker) => {
@@ -77,9 +97,9 @@ The key insight: `useCallTool` **does** return the data via `result.structuredCo
 -      console.error("callTool threw synchronously:", err);
 -    }
 +    setBiomarkerReport(null); // clear previous report
++    if (!reportText) return;  // guard: tool requires reportText
 +    callToolAsync({ markerName: marker.name, reportText, problem })
 +      .then((result) => {
-+        // structuredContent contains the widget props returned by the tool
 +        const data = result.structuredContent as BiomarkerReportProps | undefined;
 +        if (data) setBiomarkerReport(data);
 +      })
@@ -87,8 +107,18 @@ The key insight: `useCallTool` **does** return the data via `result.structuredCo
    };
 ```
 
-**Step 3 — Update MarkerInfoCard to use `isReportLoading`**
+**Step 5 — Update `onClose` callbacks to also clear the report**
 
+Everywhere `onClose` is used (chart view line ~153, list view line ~207):
+
+```diff
+-                  onClose={() => setSelectedMarker(null)}
++                  onClose={() => { setSelectedMarker(null); setBiomarkerReport(null); }}
+```
+
+**Step 6 — Update MarkerInfoCard `isLoading` wiring**
+
+In chart view (line ~148-155):
 ```diff
                {selectedMarker && (
                  <MarkerInfoCard
@@ -96,16 +126,38 @@ The key insight: `useCallTool` **does** return the data via `result.structuredCo
                    marker={selectedMarker}
 -                  isLoading={biomarkerCall.isPending}
 +                  isLoading={isReportLoading}
-                   onClose={() => setSelectedMarker(null)}
+-                  onClose={() => setSelectedMarker(null)}
++                  onClose={() => { setSelectedMarker(null); setBiomarkerReport(null); }}
                  />
                )}
 ```
 
-(Same change in the list view around line 201-208.)
+In list view (line ~201-208):
+```diff
+                     {isSelected && (
+                       <MarkerInfoCard
+                         key={marker.name}
+                         marker={marker}
+-                        isLoading={biomarkerCall.isPending}
++                        isLoading={isReportLoading}
+-                        onClose={() => setSelectedMarker(null)}
++                        onClose={() => { setSelectedMarker(null); setBiomarkerReport(null); }}
+                       />
+                     )}
+```
 
-**Step 4 — Render the biomarker report inline below the MarkerInfoCard**
+**Step 7 — Render the biomarker report inline**
 
-Add this after the `MarkerInfoCard` block inside the chart view container (after line ~155), and similarly in the list view:
+Add after the `MarkerInfoCard` block inside the chart view container (after line ~155).
+
+All component props verified against actual interfaces:
+- `ResultGauge`: `{ result: ResultAnalysis }` ✅
+- `OverviewSection`: `{ overview: MarkerOverview }` ✅
+- `AnalysisSection`: `{ result: ResultAnalysis; problem?: string }` ✅
+- `CausesSection`: `{ causes: CommonCauses; status: "normal"|"borderline"|"abnormal"; referenceRangeLow?: number|null; referenceRangeHigh?: number|null; value?: number }` ✅
+- `RelatedMarkers`: `{ markers: RelatedMarker[] }` ✅ (note: this is `RelatedMarker` from `biomarker-report/types`, NOT `RelevantMarker` from `problem-analysis/types`)
+- `RecommendationsGrid`: `{ recommendations: Recommendation[] }` ✅
+- `DoctorSection`: `{ doctor: DoctorSectionType }` ✅
 
 ```tsx
 {/* Inline biomarker deep-dive report */}
@@ -124,6 +176,11 @@ Add this after the `MarkerInfoCard` block inside the chart view container (after
         {biomarkerReport.overview.fullName !== biomarkerReport.overview.commonName && (
           <p style={{ fontSize: 12, color: "var(--color-text-secondary, #6b7280)" }}>
             {biomarkerReport.overview.fullName}
+          </p>
+        )}
+        {problem && (
+          <p style={{ fontSize: 12, color: "var(--color-text-secondary, #6b7280)", marginTop: 2 }}>
+            In context of: <em>{problem}</em>
           </p>
         )}
       </div>
@@ -175,13 +232,40 @@ Add this after the `MarkerInfoCard` block inside the chart view container (after
 )}
 ```
 
+**Step 8 — Same inline report block in list view**
+
+Add the same inline report block after the `MarkerInfoCard` in the list view (after line ~208), but wrapped differently since each list item has its own card:
+
+```tsx
+{/* inside the list item div, after MarkerInfoCard */}
+{isSelected && biomarkerReport && !isReportLoading && (
+  <div className="bb-panel-fade" style={{ marginTop: 8 }}>
+    {/* ... same report content as Step 7 ... */}
+  </div>
+)}
+```
+
+To avoid duplicating the report JSX, extract it into a local component:
+
+```tsx
+const InlineBiomarkerReport: React.FC<{ report: BiomarkerReportProps }> = ({ report }) => (
+  <div className="bb-panel-fade" style={{ marginTop: 16 }}>
+    <div className="rounded-2xl border border-default bg-surface-elevated p-5 space-y-5">
+      {/* ... all 7 sections ... */}
+    </div>
+  </div>
+);
+```
+
+Then use `<InlineBiomarkerReport report={biomarkerReport} />` in both the chart and list views.
+
 ---
 
 ### File 2: `resources/problem-analysis/components/MarkerInfoCard.tsx`
 
-No changes needed — `isLoading` prop is still used, just wired to `isReportLoading` from the updated `useCallTool` destructuring.
+No structural changes — `isLoading` prop stays, wired to the new `isReportLoading`.
 
-Update the "done" message to reflect inline rendering:
+One text update to reflect inline rendering:
 
 ```diff
 -            Report generated — scroll down in chat
@@ -190,58 +274,100 @@ Update the "done" message to reflect inline rendering:
 
 ---
 
-### No changes to: `index.ts` (server)
+### File 3: `index.ts` (server) — No changes needed for primary approach
 
-The `generate-biomarker-report` tool stays exactly as-is. It still returns `widget()` so it works when the AI calls it directly (e.g., user types "analyze my Vitamin D"). The problem-analysis widget just reads the data from the response instead of relying on the framework to render a separate widget.
+The `generate-biomarker-report` tool stays as-is. It still returns `widget()` so it works when the AI calls it directly.
 
 ---
 
 ## Fallback: If `structuredContent` Doesn't Contain Widget Props
 
-If `callToolAsync` doesn't return widget props in `structuredContent`, we have a simple fallback — modify the tool to **also** return the props as structured data alongside the widget:
+If `callToolAsync` doesn't return widget props in `structuredContent`, there are two clean fallbacks:
+
+### Option A: Return data alongside the widget (recommended)
+
+Keep the human-readable `output` and add the props as a separate content block in the tool response:
 
 ```diff
  // In index.ts, generate-biomarker-report handler:
++      const reportData = {
++        overview: parsed.markerOverview,
++        result: parsed.resultAnalysis,
++        causes: parsed.commonCauses,
++        relatedMarkers: parsed.relatedMarkers ?? [],
++        recommendations: parsed.foodAndLifestyle ?? [],
++        doctor: parsed.whenToSeeDoctor,
++        problem,
++      };
++
        return widget({
-         props: {
-           overview: parsed.markerOverview,
-           result: parsed.resultAnalysis,
-           causes: parsed.commonCauses,
-           relatedMarkers: parsed.relatedMarkers ?? [],
-           recommendations: parsed.foodAndLifestyle ?? [],
-           doctor: parsed.whenToSeeDoctor,
-           problem,
-         },
--        output: text(
--          `Biomarker report for ${markerName} generated. Score: ${parsed.resultAnalysis?.score ?? "N/A"}/100. ${parsed.resultAnalysis?.interpretation?.substring(0, 150) ?? ""}...`
--        ),
-+        output: text(JSON.stringify({
-+          overview: parsed.markerOverview,
-+          result: parsed.resultAnalysis,
-+          causes: parsed.commonCauses,
-+          relatedMarkers: parsed.relatedMarkers ?? [],
-+          recommendations: parsed.foodAndLifestyle ?? [],
-+          doctor: parsed.whenToSeeDoctor,
-+          problem,
-+        })),
+-        props: {
+-          overview: parsed.markerOverview,
+-          result: parsed.resultAnalysis,
+-          causes: parsed.commonCauses,
+-          relatedMarkers: parsed.relatedMarkers ?? [],
+-          recommendations: parsed.foodAndLifestyle ?? [],
+-          doctor: parsed.whenToSeeDoctor,
+-          problem,
+-        },
++        props: reportData,
+         output: text(
+           `Biomarker report for ${markerName} generated. Score: ${parsed.resultAnalysis?.score ?? "N/A"}/100. ${parsed.resultAnalysis?.interpretation?.substring(0, 150) ?? ""}...`
+         ),
++        structuredContent: reportData,
        });
 ```
 
-Then in the widget, parse the text content from the result:
-
+Then in the widget:
 ```tsx
 .then((result) => {
-  // Try structuredContent first, fall back to parsing text content
-  let data = result.structuredContent as BiomarkerReportProps | undefined;
-  if (!data && result.content) {
-    const textBlock = result.content.find((c: any) => c.type === "text");
-    if (textBlock) data = JSON.parse(textBlock.text);
-  }
-  if (data) setBiomarkerReport(data);
+  const data = result.structuredContent as BiomarkerReportProps | undefined;
+  if (data?.overview && data?.result) setBiomarkerReport(data);
 })
 ```
 
-**Note:** This fallback changes the tool's text output from a human-readable summary to JSON. If you want to keep human-readable output for the AI, you can add a second text block or use a separate content type. The cleanest option is to check whether `structuredContent` works first before applying this fallback.
+> **Note:** Check if `widget()` in mcp-use/server accepts a `structuredContent` field. If not, see Option B.
+
+### Option B: Create a data-only sibling tool
+
+Add a second tool that returns JSON data (not a widget) for widget-to-widget consumption:
+
+```typescript
+server.tool(
+  {
+    name: "get-biomarker-data",
+    description: "Internal tool: returns biomarker analysis data as JSON for inline rendering. Prefer generate-biomarker-report for user-facing requests.",
+    schema: z.object({
+      reportText: z.string(),
+      markerName: z.string(),
+      problem: z.string().optional(),
+    }),
+    annotations: { readOnlyHint: true },
+  },
+  async ({ reportText, markerName, problem }) => {
+    // ... same GPT-4o analysis logic ...
+    return text(JSON.stringify(reportData));
+  }
+);
+```
+
+Then in the widget use `useCallTool("get-biomarker-data")` and `JSON.parse()` the result.
+
+This keeps `generate-biomarker-report` (with widget rendering) untouched for direct AI usage, while providing a clean data endpoint for widget consumption.
+
+---
+
+## Issues Found & Addressed in This Revision
+
+| # | Issue | Status |
+|---|-------|--------|
+| 1 | `reportText` is now optional in `ProblemAnalysisProps` but required by `generate-biomarker-report` tool | Fixed — added `if (!reportText) return;` guard in Step 4 |
+| 2 | Escape key handler didn't clear `biomarkerReport` state | Fixed — Step 3 |
+| 3 | `onClose` callbacks didn't clear `biomarkerReport` state | Fixed — Step 5 |
+| 4 | Toggling off a marker didn't clear `biomarkerReport` state | Fixed — Step 4 adds `setBiomarkerReport(null)` in toggle-off branch |
+| 5 | List view missing inline report block | Fixed — Step 8 covers list view and suggests extracting shared component |
+| 6 | Original fallback replaced human-readable output with JSON (breaks AI flow) | Fixed — new fallback Option A adds `structuredContent` alongside output; Option B uses a separate data-only tool |
+| 7 | Component prop types not verified | Fixed — all 7 component interfaces verified against source files |
 
 ---
 
@@ -249,17 +375,22 @@ Then in the widget, parse the text content from the result:
 
 | File | What Changes |
 |------|-------------|
-| `widget.tsx` | Import biomarker report sub-components |
-| `widget.tsx` | Add `biomarkerReport` state, use `callToolAsync` |
-| `widget.tsx` | Render report inline below the chart when data arrives |
+| `widget.tsx` | Import biomarker report types + 7 sub-components |
+| `widget.tsx` | Add `biomarkerReport` state, use `callToolAsync` to fetch data |
+| `widget.tsx` | Guard against `reportText` being `undefined` |
+| `widget.tsx` | Clear `biomarkerReport` on escape, close, toggle-off, and marker switch |
+| `widget.tsx` | Render full report inline in both chart and list views |
+| `widget.tsx` | Extract `InlineBiomarkerReport` component to avoid duplication |
 | `MarkerInfoCard.tsx` | Update "done" message text |
-| `index.ts` | No changes (fallback only if needed) |
+| `index.ts` | No changes (fallback only if `structuredContent` doesn't work) |
 
 ## Expected Behavior After Fix
 
 1. User clicks a biomarker dot or label on the spider chart
-2. The marker highlights; MarkerInfoCard slides in with spinner
+2. The marker highlights (pulsing dot, status color); MarkerInfoCard slides in with spinner
 3. `callToolAsync` fetches the deep-dive data in the background
 4. When data arrives, the full biomarker report renders **inline below the spider chart** — with gauge, overview, analysis, causes, related markers, recommendations, and doctor section
 5. User sees everything in one place without scrolling through chat
 6. Clicking a different marker replaces the report; clicking same marker collapses it
+7. Escape key or close button dismisses both the info card and the report
+8. Spider chart remains fully visible and interactive throughout
