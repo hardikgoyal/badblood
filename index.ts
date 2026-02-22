@@ -1,4 +1,4 @@
-import { MCPServer, text, widget, error } from "mcp-use/server";
+import { MCPServer, text, widget, object, error } from "mcp-use/server";
 import { z } from "zod";
 import OpenAI from "openai";
 
@@ -262,11 +262,6 @@ server.tool(
         ),
     }),
     annotations: { readOnlyHint: true, openWorldHint: true },
-    widget: {
-      name: "biomarker-report",
-      invoking: "Generating your biomarker deep-dive...",
-      invoked: "Biomarker report ready",
-    },
   },
   async ({ reportText, markerName, problem }) => {
     try {
@@ -356,19 +351,14 @@ Return JSON with exactly these keys:
 
       const parsed = JSON.parse(content);
 
-      return widget({
-        props: {
-          overview: parsed.markerOverview,
-          result: parsed.resultAnalysis,
-          causes: parsed.commonCauses,
-          relatedMarkers: parsed.relatedMarkers ?? [],
-          recommendations: parsed.foodAndLifestyle ?? [],
-          doctor: parsed.whenToSeeDoctor,
-          problem,
-        },
-        output: text(
-          `Biomarker report for ${markerName} generated. Score: ${parsed.resultAnalysis?.score ?? "N/A"}/100. ${parsed.resultAnalysis?.interpretation?.substring(0, 150) ?? ""}...`
-        ),
+      return object({
+        overview: parsed.markerOverview,
+        result: parsed.resultAnalysis,
+        causes: parsed.commonCauses,
+        relatedMarkers: parsed.relatedMarkers ?? [],
+        recommendations: parsed.foodAndLifestyle ?? [],
+        doctor: parsed.whenToSeeDoctor,
+        problem,
       });
     } catch (err) {
       console.error("Error generating biomarker report:", err);

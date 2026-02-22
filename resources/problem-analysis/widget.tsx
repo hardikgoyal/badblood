@@ -1,13 +1,20 @@
-import { McpUseProvider, useWidget, type WidgetMetadata } from "mcp-use/react";
+import { McpUseProvider, useWidget, useCallTool, type WidgetMetadata } from "mcp-use/react";
 import { AppsSDKUIProvider } from "@openai/apps-sdk-ui/components/AppsSDKUIProvider";
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router";
 import "../styles.css";
 import { propSchema, type ProblemAnalysisProps, type RelevantMarker } from "./types";
+import type { BiomarkerReportProps } from "../biomarker-report/types";
 import { SpiderChart } from "./components/SpiderChart";
 import { ChartSummary } from "./components/ChartSummary";
 import { RecommendationsList } from "./components/RecommendationsList";
-import { MarkerInfoCard } from "./components/MarkerInfoCard";
+import { ResultGauge } from "../biomarker-report/components/ResultGauge";
+import { OverviewSection } from "../biomarker-report/components/OverviewSection";
+import { AnalysisSection } from "../biomarker-report/components/AnalysisSection";
+import { CausesSection } from "../biomarker-report/components/CausesSection";
+import { RelatedMarkers } from "../biomarker-report/components/RelatedMarkers";
+import { RecommendationsGrid } from "../biomarker-report/components/RecommendationsGrid";
+import { DoctorSection } from "../biomarker-report/components/DoctorSection";
 
 export const widgetMetadata: WidgetMetadata = {
   description:
@@ -38,15 +45,22 @@ const statusConfig = {
 
 type ViewMode = "chart" | "list";
 
+const SectionDivider: React.FC = () => (
+  <div style={{ height: 1, background: "var(--color-border-default, #e5e7eb)" }} />
+);
+
 const ProblemAnalysis: React.FC = () => {
-  const { props, isPending, sendFollowUpMessage } = useWidget<ProblemAnalysisProps>();
+  const { props, isPending } = useWidget<ProblemAnalysisProps>();
   const [view, setView] = useState<ViewMode>("chart");
   const [selectedMarker, setSelectedMarker] = useState<RelevantMarker | null>(null);
+  const [biomarkerReport, setBiomarkerReport] = useState<BiomarkerReportProps | null>(null);
+  const [reportError, setReportError] = useState<string | null>(null);
+  const biomarkerCall = useCallTool("generate-biomarker-report");
 
-  // Escape key dismisses the info card
+  // Escape key closes detail view
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setSelectedMarker(null);
+      if (e.key === "Escape") handleBack();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -65,19 +79,157 @@ const ProblemAnalysis: React.FC = () => {
     );
   }
 
-  const { problem, relevantMarkers, interpretation, recommendations } = props;
+  const { problem, relevantMarkers, interpretation, recommendations, reportText } = props;
 
   const handleMarkerClick = (marker: RelevantMarker) => {
-    if (selectedMarker?.name === marker.name) {
-      setSelectedMarker(null);
+    if (selectedMarker?.name === marker.name && biomarkerReport) {
+      // Already showing this marker's report — do nothing
       return;
     }
     setSelectedMarker(marker);
-    sendFollowUpMessage(
-      `Analyze my ${marker.name} biomarker in detail based on my blood report`
-    );
+    setBiomarkerReport(null);
+    setReportError(null);
+    try {
+      biomarkerCall.callTool(
+        { markerName: marker.name, reportText, problem },
+        {
+          onSuccess: (data) => {
+            setBiomarkerReport(data.structuredContent as unknown as BiomarkerReportProps);
+          },
+          onError: (err) => {
+            console.error("generate-biomarker-report failed:", err);
+            setReportError(
+              "Deep-dive requires the ChatGPT environment and is not available in the inspector."
+            );
+          },
+        }
+      );
+    } catch (err) {
+      console.error("callTool threw synchronously:", err);
+      setReportError(
+        "Deep-dive requires the ChatGPT environment and is not available in the inspector."
+      );
+    }
   };
 
+  const handleBack = () => {
+    setSelectedMarker(null);
+    setBiomarkerReport(null);
+    setReportError(null);
+  };
+
+  // ── Deep-dive detail view ─────────────────────────────────────────────────
+  if (selectedMarker) {
+    return (
+      <McpUseProvider autoSize>
+        <AppsSDKUIProvider linkComponent={Link}>
+          <div className="p-5 space-y-5">
+            {/* Header */}
+            <div>
+              <p className="text-xs font-semibold text-secondary uppercase tracking-widest mb-1">
+                Problem Analysis
+              </p>
+              <h2 className="heading-xl text-default capitalize">{problem}</h2>
+            </div>
+
+            {/* Back button */}
+            <button
+              onClick={handleBack}
+              className="flex items-center gap-1.5 text-sm text-secondary hover:text-default transition-colors"
+            >
+              ← Back to chart
+            </button>
+
+            {reportError ? (
+              <div className="rounded-xl border border-default bg-surface-elevated p-4 text-center space-y-2">
+                <p className="text-sm font-semibold text-default">Available in ChatGPT only</p>
+                <p className="text-xs text-secondary leading-relaxed">{reportError}</p>
+              </div>
+            ) : biomarkerCall.isPending || !biomarkerReport ? (
+              /* Loading skeleton */
+              <div className="space-y-4">
+                <div className="h-24 rounded-2xl bg-default/10 animate-pulse" />
+                <div className="h-5 w-40 rounded bg-default/10 animate-pulse" />
+                <div className="h-16 rounded-xl bg-default/10 animate-pulse" />
+                <div className="h-20 rounded-xl bg-default/10 animate-pulse" />
+                <div className="flex gap-2">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="h-28 w-36 rounded-xl bg-default/10 animate-pulse flex-shrink-0" />
+                  ))}
+                </div>
+                <div className="h-16 rounded-xl bg-default/10 animate-pulse" />
+                <div className="h-24 rounded-xl bg-default/10 animate-pulse" />
+              </div>
+            ) : (
+              /* Full biomarker report rendered inline */
+              <div className="space-y-5">
+                {/* Marker name */}
+                <div>
+                  <h3 className="text-lg font-bold text-default">
+                    {biomarkerReport.overview.commonName}
+                  </h3>
+                  {biomarkerReport.overview.fullName !== biomarkerReport.overview.commonName && (
+                    <p className="text-xs text-secondary">{biomarkerReport.overview.fullName}</p>
+                  )}
+                </div>
+
+                {/* Result Gauge */}
+                <div className="rounded-2xl border border-default bg-surface-elevated p-4">
+                  <ResultGauge result={biomarkerReport.result} />
+                </div>
+
+                <SectionDivider />
+                <OverviewSection overview={biomarkerReport.overview} />
+
+                <SectionDivider />
+                <AnalysisSection result={biomarkerReport.result} problem={biomarkerReport.problem} />
+
+                <SectionDivider />
+                <CausesSection
+                  causes={biomarkerReport.causes}
+                  status={biomarkerReport.result.status}
+                  referenceRangeLow={biomarkerReport.result.referenceRangeLow}
+                  referenceRangeHigh={biomarkerReport.result.referenceRangeHigh}
+                  value={biomarkerReport.result.value}
+                />
+
+                {biomarkerReport.relatedMarkers.length > 0 && (
+                  <>
+                    <SectionDivider />
+                    <RelatedMarkers markers={biomarkerReport.relatedMarkers} />
+                  </>
+                )}
+
+                <SectionDivider />
+                <RecommendationsGrid recommendations={biomarkerReport.recommendations} />
+
+                <SectionDivider />
+                <div>
+                  <h3
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 700,
+                      color: "var(--color-text-default, #111)",
+                      marginBottom: 10,
+                    }}
+                  >
+                    When to See a Doctor
+                  </h3>
+                  <DoctorSection doctor={biomarkerReport.doctor} />
+                </div>
+
+                <p className="text-xs text-secondary text-center italic pb-1">
+                  For informational purposes only. Always consult a qualified healthcare professional.
+                </p>
+              </div>
+            )}
+          </div>
+        </AppsSDKUIProvider>
+      </McpUseProvider>
+    );
+  }
+
+  // ── Main chart / list view ────────────────────────────────────────────────
   return (
     <McpUseProvider autoSize>
       <AppsSDKUIProvider linkComponent={Link}>
@@ -110,7 +262,7 @@ const ProblemAnalysis: React.FC = () => {
             ))}
           </div>
 
-          {/* Spider Chart + Summary side by side */}
+          {/* Spider Chart */}
           {view === "chart" && (
             <div className="rounded-2xl border border-default bg-surface-elevated p-4">
               <p className="text-xs text-secondary mb-3">Click a marker to get a deep-dive report</p>
@@ -121,29 +273,15 @@ const ProblemAnalysis: React.FC = () => {
                   onMarkerClick={handleMarkerClick}
                 />
                 <div
-                  style={{
-                    borderLeft: "1px solid var(--color-border-default, #e5e7eb)",
-                    paddingLeft: 16,
-                  }}
+                  style={{ borderLeft: "1px solid var(--color-border-default, #e5e7eb)", paddingLeft: 16 }}
                   className="hidden sm:block"
                 >
                   <ChartSummary markers={relevantMarkers} problem={problem} />
                 </div>
               </div>
-              {/* On narrow screens, summary stacks below */}
               <div className="sm:hidden mt-4 pt-4 border-t border-default">
                 <ChartSummary markers={relevantMarkers} problem={problem} />
               </div>
-
-              {/* Info card — slides in below chart when a marker is selected */}
-              {selectedMarker && (
-                <MarkerInfoCard
-                  key={selectedMarker.name}
-                  marker={selectedMarker}
-
-                  onClose={() => setSelectedMarker(null)}
-                />
-              )}
             </div>
           )}
 
@@ -152,51 +290,28 @@ const ProblemAnalysis: React.FC = () => {
             <div className="space-y-2">
               {relevantMarkers.map((marker, i) => {
                 const cfg = statusConfig[marker.status];
-                const isSelected = selectedMarker?.name === marker.name;
                 return (
-                  <div key={i}>
-                    <div
-                      className={`rounded-xl border p-3 flex items-start gap-3 cursor-pointer transition-colors ${
-                        isSelected
-                          ? "border-default bg-surface-elevated"
-                          : "border-default hover:bg-surface-elevated"
-                      }`}
-                      onClick={() => handleMarkerClick(marker)}
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap mb-1">
-                          <span className="font-semibold text-sm text-default">
-                            {marker.name}
-                          </span>
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-xs font-medium ${cfg.badge}`}
-                          >
-                            {cfg.label}
-                          </span>
-                        </div>
-                        <p className="text-sm text-default">
-                          {marker.value}{" "}
-                          <span className="text-secondary">
-                            (ref: {marker.referenceRange})
-                          </span>
-                        </p>
-                        <p className="text-xs text-secondary mt-1 leading-relaxed">
-                          {marker.relevanceNote}
-                        </p>
+                  <div
+                    key={i}
+                    className="rounded-xl border border-default p-3 flex items-start gap-3 cursor-pointer hover:bg-surface-elevated transition-colors"
+                    onClick={() => handleMarkerClick(marker)}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <span className="font-semibold text-sm text-default">{marker.name}</span>
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${cfg.badge}`}>
+                          {cfg.label}
+                        </span>
                       </div>
-                      <span className="text-secondary text-xs shrink-0 self-center">
-                        {isSelected ? "↓" : "→"}
-                      </span>
+                      <p className="text-sm text-default">
+                        {marker.value}{" "}
+                        <span className="text-secondary">(ref: {marker.referenceRange})</span>
+                      </p>
+                      <p className="text-xs text-secondary mt-1 leading-relaxed">
+                        {marker.relevanceNote}
+                      </p>
                     </div>
-                    {/* Info card inline in list view */}
-                    {isSelected && (
-                      <MarkerInfoCard
-                        key={marker.name}
-                        marker={marker}
-      
-                        onClose={() => setSelectedMarker(null)}
-                      />
-                    )}
+                    <span className="text-secondary text-xs shrink-0 self-center">→</span>
                   </div>
                 );
               })}
@@ -205,21 +320,16 @@ const ProblemAnalysis: React.FC = () => {
 
           {/* Interpretation */}
           <div className="rounded-2xl border border-default bg-surface-elevated p-4">
-            <h3 className="text-sm font-semibold text-default mb-2">
-              AI Interpretation
-            </h3>
+            <h3 className="text-sm font-semibold text-default mb-2">AI Interpretation</h3>
             <p className="text-sm text-secondary leading-relaxed">{interpretation}</p>
           </div>
 
           {/* Recommendations */}
           <div>
-            <h3 className="text-sm font-semibold text-default mb-3">
-              Recommendations
-            </h3>
+            <h3 className="text-sm font-semibold text-default mb-3">Recommendations</h3>
             <RecommendationsList recommendations={recommendations} />
           </div>
 
-          {/* Disclaimer */}
           <p className="text-xs text-secondary text-center italic pb-1">
             For informational purposes only. Always consult a qualified healthcare professional.
           </p>

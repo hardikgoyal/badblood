@@ -61,7 +61,7 @@ export const SpiderChart: React.FC<SpiderChartProps> = ({ markers, problem, onMa
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   const [selectedMarkerName, setSelectedMarkerName] = useState<string | null>(null);
 
-  // Custom dot renderer — makes every dot clickable
+  // Custom dot renderer — transparent hit area ensures clicks register in Recharts SVG
   const renderDot = (props: any) => {
     const { cx, cy, payload } = props;
     if (cx === undefined || cy === undefined) return null;
@@ -70,26 +70,42 @@ export const SpiderChart: React.FC<SpiderChartProps> = ({ markers, problem, onMa
     const color = marker ? STATUS_COLORS[marker.status] : "#6366f1";
 
     return (
-      <circle
+      <g
         key={`dot-${payload.subject}`}
-        cx={cx}
-        cy={cy}
-        r={isSelected ? 7 : 4}
-        fill={isSelected ? color : "#6366f1"}
-        stroke={isSelected ? color : "none"}
-        strokeWidth={isSelected ? 2 : 0}
-        opacity={selectedMarkerName && !isSelected ? 0.3 : 1}
-        style={{
-          cursor: onMarkerClick ? "pointer" : "default",
-          transition: "opacity 0.2s ease, r 0.15s ease",
-        }}
-        onClick={() => {
+        onClick={(e) => {
+          e.stopPropagation();
           if (!marker || !onMarkerClick) return;
           setSelectedMarkerName((prev) => (prev === marker.name ? null : marker.name));
           onMarkerClick(marker);
         }}
-      />
+        style={{ cursor: onMarkerClick ? "pointer" : "default" }}
+      >
+        {/* Wide transparent hit area so clicks register reliably */}
+        <circle cx={cx} cy={cy} r={14} fill="transparent" pointerEvents="all" />
+        {/* Visible dot */}
+        <circle
+          cx={cx}
+          cy={cy}
+          r={isSelected ? 7 : 4}
+          fill={isSelected ? color : "#6366f1"}
+          stroke={isSelected ? color : "none"}
+          strokeWidth={isSelected ? 2 : 0}
+          opacity={selectedMarkerName && !isSelected ? 0.3 : 1}
+          pointerEvents="none"
+        />
+      </g>
     );
+  };
+
+  // Fallback: Radar-level click (Recharts passes payload.subject, not subject directly)
+  const handleRadarClick = (data: any) => {
+    if (!onMarkerClick) return;
+    const subject = data?.payload?.subject ?? data?.subject;
+    if (!subject) return;
+    const marker = markers.find((m) => m.name === subject);
+    if (!marker) return;
+    setSelectedMarkerName((prev) => (prev === marker.name ? null : marker.name));
+    onMarkerClick(marker);
   };
 
   const scores = markers.map((m) => m.score);
@@ -223,6 +239,8 @@ export const SpiderChart: React.FC<SpiderChartProps> = ({ markers, problem, onMa
               strokeWidth={2.5}
               dot={renderDot}
               activeDot={false}
+              onClick={handleRadarClick}
+              style={{ cursor: onMarkerClick ? "pointer" : "default" }}
             />
           </RadarChart>
         </ResponsiveContainer>
