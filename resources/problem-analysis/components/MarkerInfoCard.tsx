@@ -3,7 +3,6 @@ import type { RelevantMarker } from "../types";
 
 interface MarkerInfoCardProps {
   marker: RelevantMarker;
-  isLoading: boolean;
   onClose: () => void;
 }
 
@@ -19,7 +18,7 @@ const STATUS_LABELS = {
   abnormal:   "Abnormal",
 } as const;
 
-export const MarkerInfoCard: React.FC<MarkerInfoCardProps> = ({ marker, isLoading, onClose }) => {
+export const MarkerInfoCard: React.FC<MarkerInfoCardProps> = ({ marker, onClose }) => {
   const color = STATUS_COLORS[marker.status];
   const statusLabel = STATUS_LABELS[marker.status];
   const def = "var(--color-text-default, #111)";
@@ -104,45 +103,11 @@ export const MarkerInfoCard: React.FC<MarkerInfoCardProps> = ({ marker, isLoadin
           color: secondary,
           borderLeft: `3px solid ${color}`,
           paddingLeft: 8,
-          marginBottom: 12,
+          margin: 0,
         }}
       >
         {marker.relevanceNote}
       </p>
-
-      {/* Status row */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          fontSize: 12,
-          color: secondary,
-        }}
-      >
-        {isLoading ? (
-          <>
-            <span
-              style={{
-                width: 14,
-                height: 14,
-                borderRadius: "50%",
-                border: `2px solid ${color}`,
-                borderTopColor: "transparent",
-                display: "inline-block",
-                animation: "spin 0.7s linear infinite",
-                flexShrink: 0,
-              }}
-            />
-            Generating deep-dive report…
-          </>
-        ) : (
-          <>
-            <span style={{ color }}>✓</span>
-            Report generated — scroll down in chat
-          </>
-        )}
-      </div>
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import { McpUseProvider, useWidget, useCallTool, type WidgetMetadata } from "mcp-use/react";
+import { McpUseProvider, useWidget, type WidgetMetadata } from "mcp-use/react";
 import { AppsSDKUIProvider } from "@openai/apps-sdk-ui/components/AppsSDKUIProvider";
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router";
@@ -39,10 +39,9 @@ const statusConfig = {
 type ViewMode = "chart" | "list";
 
 const ProblemAnalysis: React.FC = () => {
-  const { props, isPending } = useWidget<ProblemAnalysisProps>();
+  const { props, isPending, sendFollowUpMessage } = useWidget<ProblemAnalysisProps>();
   const [view, setView] = useState<ViewMode>("chart");
   const [selectedMarker, setSelectedMarker] = useState<RelevantMarker | null>(null);
-  const biomarkerCall = useCallTool("generate-biomarker-report");
 
   // Escape key dismisses the info card
   useEffect(() => {
@@ -66,25 +65,17 @@ const ProblemAnalysis: React.FC = () => {
     );
   }
 
-  const { problem, relevantMarkers, interpretation, recommendations, reportText } = props;
+  const { problem, relevantMarkers, interpretation, recommendations } = props;
 
   const handleMarkerClick = (marker: RelevantMarker) => {
-    // Toggle off if same marker clicked again
     if (selectedMarker?.name === marker.name) {
       setSelectedMarker(null);
       return;
     }
     setSelectedMarker(marker);
-    try {
-      biomarkerCall.callTool(
-        { markerName: marker.name, reportText, problem },
-        {
-          onError: (err) => console.error("generate-biomarker-report failed:", err),
-        }
-      );
-    } catch (err) {
-      console.error("callTool threw synchronously:", err);
-    }
+    sendFollowUpMessage(
+      `Analyze my ${marker.name} biomarker in detail based on my blood report`
+    );
   };
 
   return (
@@ -149,7 +140,7 @@ const ProblemAnalysis: React.FC = () => {
                 <MarkerInfoCard
                   key={selectedMarker.name}
                   marker={selectedMarker}
-                  isLoading={biomarkerCall.isPending}
+
                   onClose={() => setSelectedMarker(null)}
                 />
               )}
@@ -202,7 +193,7 @@ const ProblemAnalysis: React.FC = () => {
                       <MarkerInfoCard
                         key={marker.name}
                         marker={marker}
-                        isLoading={biomarkerCall.isPending}
+      
                         onClose={() => setSelectedMarker(null)}
                       />
                     )}
