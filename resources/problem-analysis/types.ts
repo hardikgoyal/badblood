@@ -14,7 +14,17 @@ export const propSchema = z.object({
   relevantMarkers: z.array(relevantMarkerSchema),
   interpretation: z.string(),
   recommendations: z.array(z.string()),
+  reportText: z.string(),
 });
 
 export type RelevantMarker = z.infer<typeof relevantMarkerSchema>;
 export type ProblemAnalysisProps = z.infer<typeof propSchema>;
+
+export interface MarkerAnalysis {
+  headline: string;
+  bodyContext: string;
+  yourObservation: string;
+  possibleCauses: string[];
+  linkedSymptoms: string[];
+  actionSteps: string[];
+}

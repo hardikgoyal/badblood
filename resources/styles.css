@@ -39,6 +39,26 @@ a {
   @apply text-info;
 }
 
+/* Marker info card slide-in animation */
+@keyframes bb-panel-fade {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.bb-panel-fade {
+  animation: bb-panel-fade 0.25s ease both;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 /* Carousel scroll container with padding for blur effect */
 .carousel-scroll-container {
   padding-bottom: 2rem;

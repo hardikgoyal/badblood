@@ -12,6 +12,7 @@ import type { RelevantMarker } from "../types";
 interface SpiderChartProps {
   markers: RelevantMarker[];
   problem: string;
+  onMarkerClick?: (marker: RelevantMarker) => void;
 }
 
 interface TooltipState {
@@ -55,9 +56,41 @@ function wrapText(text: string, maxChars = 11): string[] {
   return lines;
 }
 
-export const SpiderChart: React.FC<SpiderChartProps> = ({ markers, problem }) => {
+export const SpiderChart: React.FC<SpiderChartProps> = ({ markers, problem, onMarkerClick }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
+  const [selectedMarkerName, setSelectedMarkerName] = useState<string | null>(null);
+
+  // Custom dot renderer — makes every dot clickable
+  const renderDot = (props: any) => {
+    const { cx, cy, payload } = props;
+    if (cx === undefined || cy === undefined) return null;
+    const marker = markers.find((m) => m.name === payload.subject);
+    const isSelected = selectedMarkerName === payload.subject;
+    const color = marker ? STATUS_COLORS[marker.status] : "#6366f1";
+
+    return (
+      <circle
+        key={`dot-${payload.subject}`}
+        cx={cx}
+        cy={cy}
+        r={isSelected ? 7 : 4}
+        fill={isSelected ? color : "#6366f1"}
+        stroke={isSelected ? color : "none"}
+        strokeWidth={isSelected ? 2 : 0}
+        opacity={selectedMarkerName && !isSelected ? 0.3 : 1}
+        style={{
+          cursor: onMarkerClick ? "pointer" : "default",
+          transition: "opacity 0.2s ease, r 0.15s ease",
+        }}
+        onClick={() => {
+          if (!marker || !onMarkerClick) return;
+          setSelectedMarkerName((prev) => (prev === marker.name ? null : marker.name));
+          onMarkerClick(marker);
+        }}
+      />
+    );
+  };
 
   const scores = markers.map((m) => m.score);
   const rawMin = Math.min(...scores);
@@ -77,7 +110,7 @@ export const SpiderChart: React.FC<SpiderChartProps> = ({ markers, problem }) =>
     fullMark: domainMax,
   }));
 
-  // Custom axis tick — full name with word-wrap, hover triggers tooltip
+  // Custom axis tick — full name with word-wrap, hover triggers tooltip, click drills in
   const renderAxisTick = (props: any) => {
     const { x, y, payload, textAnchor } = props;
     const marker = markers.find((m) => m.name === payload.value);
@@ -86,31 +119,63 @@ export const SpiderChart: React.FC<SpiderChartProps> = ({ markers, problem }) =>
     const lineHeight = 13;
     const startY = y - ((lines.length - 1) * lineHeight) / 2;
 
+    // Build a transparent hit-rect around the full label area.
+    // SVG <text> only fires events on the painted glyph pixels, not whitespace —
+    // a transparent <rect> with pointerEvents="all" gives a reliable click zone.
+    const approxCharW = 6.5;
+    const maxLineLen = Math.max(...lines.map((l) => l.length));
+    const rectW = Math.max(52, maxLineLen * approxCharW);
+    const rectH = lines.length * lineHeight + 10;
+    const rectX =
+      textAnchor === "end"    ? x - rectW      :
+      textAnchor === "middle" ? x - rectW / 2  :
+                                x; // "start"
+    const rectY = startY - 6;
+
+    const handleClick = () => {
+      if (!marker || !onMarkerClick) return;
+      setSelectedMarkerName((prev) => (prev === marker.name ? null : marker.name));
+      onMarkerClick(marker);
+    };
+
+    const handleMouseEnter = (e: React.MouseEvent) => {
+      if (!marker) return;
+      const bbox = containerRef.current?.getBoundingClientRect();
+      if (!bbox) return;
+      setTooltip({ marker, x: e.clientX - bbox.left, y: e.clientY - bbox.top });
+    };
+
     return (
-      <text
-        x={x}
-        textAnchor={textAnchor}
-        fill={statusColor}
-        fontSize={11}
-        fontWeight={marker?.status !== "normal" ? 600 : 400}
-        style={{ cursor: "default", userSelect: "none" }}
-        onMouseEnter={(e) => {
-          if (!marker) return;
-          const rect = containerRef.current?.getBoundingClientRect();
-          if (!rect) return;
-          setTooltip({
-            marker,
-            x: e.clientX - rect.left,
-            y: e.clientY - rect.top,
-          });
-        }}
+      <g
+        onClick={handleClick}
+        onMouseEnter={handleMouseEnter}
+        style={{ cursor: onMarkerClick && marker ? "pointer" : "default" }}
       >
-        {lines.map((line, i) => (
-          <tspan key={i} x={x} y={startY + i * lineHeight}>
-            {line}
-          </tspan>
-        ))}
-      </text>
+        {/* Transparent full-area hit target */}
+        <rect
+          x={rectX}
+          y={rectY}
+          width={rectW}
+          height={rectH}
+          fill="transparent"
+          stroke="none"
+          pointerEvents="all"
+        />
+        <text
+          x={x}
+          textAnchor={textAnchor}
+          fill={statusColor}
+          fontSize={11}
+          fontWeight={marker?.status !== "normal" ? 600 : 400}
+          style={{ userSelect: "none", pointerEvents: "none" }}
+        >
+          {lines.map((line, i) => (
+            <tspan key={i} x={x} y={startY + i * lineHeight}>
+              {line}
+            </tspan>
+          ))}
+        </text>
+      </g>
     );
   };
 
@@ -156,7 +221,8 @@ export const SpiderChart: React.FC<SpiderChartProps> = ({ markers, problem }) =>
               fill="#6366f1"
               fillOpacity={0.2}
               strokeWidth={2.5}
-              dot={{ r: 4, fill: "#6366f1", strokeWidth: 0 }}
+              dot={renderDot}
+              activeDot={false}
             />
           </RadarChart>
         </ResponsiveContainer>

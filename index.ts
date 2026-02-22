@@ -222,7 +222,7 @@ server.tool(
       }
 
       return widget({
-        props: { problem, relevantMarkers, interpretation, recommendations },
+        props: { problem, relevantMarkers, interpretation, recommendations, reportText },
         output: text(
           `Analysis complete for "${problem}". ${relevantMarkers.length} relevant markers identified. ${interpretation.substring(0, 200)}...`
         ),
@@ -231,6 +231,149 @@ server.tool(
       console.error("Error generating problem analysis:", err);
       return error(
         `Failed to analyze: ${err instanceof Error ? err.message : "Unknown error"}`
+      );
+    }
+  }
+);
+
+// ─── Tool 3: Comprehensive biomarker deep-dive ───────────────────────────────
+
+server.tool(
+  {
+    name: "generate-biomarker-report",
+    description:
+      "Generate a comprehensive clinical deep-dive report for a specific blood biomarker. Shows what the marker measures, analyzes the patient's result, lists common causes of abnormality, identifies related markers from the same report, and provides food/lifestyle recommendations. Call this when the user asks to analyze a specific biomarker in detail.",
+    schema: z.object({
+      reportText: z
+        .string()
+        .describe(
+          "Full text extracted from the user's uploaded blood test report file. Use the complete text from the file upload — never ask the user to type or paste this manually."
+        ),
+      markerName: z
+        .string()
+        .describe(
+          "Name of the specific biomarker to analyze, e.g. 'Vitamin D', 'TSH', 'Hemoglobin A1c'"
+        ),
+      problem: z
+        .string()
+        .optional()
+        .describe(
+          "Optional health concern for context, e.g. 'chronic fatigue', 'back pain'"
+        ),
+    }),
+    annotations: { readOnlyHint: true, openWorldHint: true },
+    widget: {
+      name: "biomarker-report",
+      invoking: "Generating your biomarker deep-dive...",
+      invoked: "Biomarker report ready",
+    },
+  },
+  async ({ reportText, markerName, problem }) => {
+    try {
+      if (!reportText.trim()) {
+        return error("Report text cannot be empty.");
+      }
+      if (!markerName.trim()) {
+        return error("Marker name cannot be empty.");
+      }
+
+      // Step 1: Extract all markers from the report
+      const { markers } = await extractBloodMarkers(reportText);
+
+      // Step 2: Find the target marker (case-insensitive, partial match)
+      const targetMarker = markers.find(
+        (m: any) =>
+          m.name.toLowerCase() === markerName.toLowerCase() ||
+          m.name.toLowerCase().includes(markerName.toLowerCase()) ||
+          markerName.toLowerCase().includes(m.name.toLowerCase())
+      );
+
+      if (!targetMarker) {
+        return error(
+          `Could not find "${markerName}" in the report. Available markers: ${markers.map((m: any) => m.name).join(", ")}`
+        );
+      }
+
+      // Step 3: GPT-4o deep analysis
+      const openai = getOpenAI();
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o",
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: "system",
+            content: `You are a clinical pathology educator. Given a specific blood biomarker result and the patient's full panel, generate a comprehensive report.
+
+Return JSON with exactly these keys:
+- "markerOverview": {
+    "fullName": string,
+    "commonName": string,
+    "whatItMeasures": string (2-3 sentences),
+    "organsInvolved": string[] (e.g. ["Bones", "Immune system", "Muscles"]),
+    "whyItMatters": string (2-3 sentences)
+  }
+- "resultAnalysis": {
+    "value": number,
+    "unit": string,
+    "referenceRangeLow": number | null,
+    "referenceRangeHigh": number | null,
+    "referenceRangeText": string,
+    "status": "normal" | "borderline" | "abnormal",
+    "score": number (0-100 health score; 95-100 = optimal, 70-94 = normal, 40-69 = borderline, 0-39 = abnormal),
+    "interpretation": string (3-4 sentences personalized to this value${problem ? ", contextualised to the health concern" : ""}),
+    "severity": "optimal" | "mild" | "moderate" | "significant"
+  }
+- "commonCauses": {
+    "ifHigh": string[] (3-5 common causes if value is high),
+    "ifLow": string[] (3-5 common causes if value is low)
+  }
+- "relatedMarkers": array of {
+    "name": string,
+    "value": string,
+    "status": "normal" | "borderline" | "abnormal",
+    "relationship": string (1 sentence: how this marker relates to the target)
+  } (3-6 clinically related markers FROM THE PROVIDED PANEL ONLY; omit if not found)
+- "foodAndLifestyle": array of {
+    "category": "food" | "supplement" | "lifestyle" | "avoid",
+    "title": string,
+    "detail": string (1-2 sentences)
+  } (5-8 recommendations)
+- "whenToSeeDoctor": {
+    "urgency": "routine" | "soon" | "urgent",
+    "reasoning": string (2-3 sentences),
+    "questionsToAsk": string[] (3-4 specific questions for the doctor)
+  }`,
+          },
+          {
+            role: "user",
+            content: `Analyze this biomarker:\n\nTarget: ${markerName}\n${problem ? `Health concern: ${problem}\n` : ""}\nFull panel:\n${JSON.stringify(markers, null, 2)}`,
+          },
+        ],
+      });
+
+      const content = response.choices[0]?.message?.content;
+      if (!content) throw new Error("No response received from OpenAI");
+
+      const parsed = JSON.parse(content);
+
+      return widget({
+        props: {
+          overview: parsed.markerOverview,
+          result: parsed.resultAnalysis,
+          causes: parsed.commonCauses,
+          relatedMarkers: parsed.relatedMarkers ?? [],
+          recommendations: parsed.foodAndLifestyle ?? [],
+          doctor: parsed.whenToSeeDoctor,
+          problem,
+        },
+        output: text(
+          `Biomarker report for ${markerName} generated. Score: ${parsed.resultAnalysis?.score ?? "N/A"}/100. ${parsed.resultAnalysis?.interpretation?.substring(0, 150) ?? ""}...`
+        ),
+      });
+    } catch (err) {
+      console.error("Error generating biomarker report:", err);
+      return error(
+        `Failed to generate report: ${err instanceof Error ? err.message : "Unknown error"}`
       );
     }
   }
@@ -256,6 +399,7 @@ Choosing the right tool:
 - If the user just wants to see their results: call generate-basic-report.
 - If the user mentions a symptom or condition (e.g. "back pain", "fatigue", "hair loss"): call generate-problem-analysis with both the report text and their stated problem.
 - If they upload a report AND mention a symptom in the same message, call generate-problem-analysis directly — no need to run the basic report first.
+- If the user asks to analyze a specific biomarker in detail (e.g. "analyze my Vitamin D", "tell me more about my TSH", "deep dive on Hemoglobin A1c"): call generate-biomarker-report with the report text and the marker name. Include the health concern if one was mentioned earlier.
 
 Tone:
 - Surface patterns and data insights only. Never provide medical diagnoses or treatment advice.
