@@ -22,23 +22,14 @@ We currently focus on two main features to make your lab data truly actionable:
 ### 1. Problem Analysis (The Spider Chart)
 Tell BadBlood how you feel. *"I'm exhausted every afternoon"* or *"My joints ache."*
 
-BadBlood instantly scans your raw lab report and connects the dots between the raw numbers and your actual physical pain. We generate a dynamic "Spider Chart" that visually maps out exactly which out-of-range markers are driving your symptoms. 
-
-No more Googling "high WBC causes" at 2 AM. You instantly see a clear visual of your health issues.
-
 <p align="center">
   <img src="assets/spider-chart-fatigue.png" alt="Problem Analysis - Spider Chart" width="100%">
 </p>
 
+No more Googling "high WBC causes" at 2 AM. You instantly see a clear visual of your health issues.
+
 ### 2. The Biomarker Report
 Once you see *which* markers are causing your symptoms, you need to understand *what to do* about them. Our Biomarker Report gives you a comprehensive, human-readable deep-dive into any single metric.
-
-It tells you:
-- **Where you stand:** A simple 0-100 gauge showing how optimal (or abnormal) your level is.
-- **The "Why":** An explanation of what the biomarker actually is, in plain English, and how it relates to the symptoms you reported.
-- **Common Causes:** Simple lists of why it might be high or low.
-- **Related Markers:** Other things in your blood report that are connected.
-- **Your Action Plan:** Concrete, actionable steps you can control—foods to eat more of, supplements to consider, lifestyle changes, and exactly when to loop in a doctor.
 
 #### The Big Picture
 <p align="center">
@@ -55,15 +46,14 @@ It tells you:
   <img src="assets/symptom-briefing.png" alt="Action Plan" width="100%">
 </p>
 
----
 
-## 🤖 Native AI Integration via MCP
+It tells you:
+- **Where you stand:** A simple 0-100 gauge showing how optimal (or abnormal) your level is.
+- **The "Why":** An explanation of what the biomarker actually is, in plain English, and how it relates to the symptoms you reported.
+- **Common Causes:** Simple lists of why it might be high or low.
+- **Related Markers:** Other things in your blood report that are connected.
+- **Your Action Plan:** Concrete, actionable steps you can control—foods to eat more of, supplements to consider, lifestyle changes, and exactly when to loop in a doctor.
 
-Building another standalone health portal or app is a losing battle. Nobody wants yet another login or app to download.
-
-BadBlood is built from the ground up as a **Model Context Protocol (MCP) server**. This is our trojan horse. By functioning as an MCP server, BadBlood injects its intelligence directly into the AI assistants you *already* use—like **ChatGPT** and **Claude**. 
-
-**Zero friction. Zero new downloads. Maximum accessibility.**
 
 ---
 
